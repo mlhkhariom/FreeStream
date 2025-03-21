@@ -13,59 +13,45 @@ export default {
         return new Response(await generateIPTVPage(), { headers: { "Content-Type": "text/html" } });
       } else if (path === "/api/trending") {
         return fetchTrendingMovies(env);
-      } else if (path.startsWith("/api/search")) {
-        const query = url.searchParams.get("q");
-        return fetchSearchResults(query);
       }
 
       return new Response(JSON.stringify({ error: "Not Found" }), { status: 404, headers: { "Content-Type": "application/json" } });
     } catch (error) {
-      console.error("Worker Error:", error);
+      console.error("❌ Worker Error:", error);
       return new Response(JSON.stringify({ error: "Internal Server Error", message: error.message }), { status: 500, headers: { "Content-Type": "application/json" } });
     }
   }
 };
 
-// ✅ Fetch Trending Movies (FIXED)
+// ✅ Fixed fetchTrendingMovies() Function
 async function fetchTrendingMovies(env) {
   const apiKey = "43d89010b257341339737be36dfaac13";
   try {
     const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${apiKey}`);
-    if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
+    
+    if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
 
     const data = await response.json();
-    if (!data.results || !Array.isArray(data.results)) throw new Error("Invalid API Response");
+
+    if (!data || !data.results || !Array.isArray(data.results)) {
+      throw new Error("Invalid API response format");
+    }
 
     return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
   } catch (error) {
     console.error("❌ Error fetching trending movies:", error);
-    return new Response(JSON.stringify({ error: "Failed to fetch trending movies", message: error.message, data: [] }), { status: 500, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } }); // Returns empty array instead of crashing
   }
 }
 
-// ✅ Search Movies & Shows
-async function fetchSearchResults(query) {
-  if (!query) return new Response(JSON.stringify({ error: "Query Missing" }), { status: 400, headers: { "Content-Type": "application/json" } });
-
-  const apiKey = "43d89010b257341339737be36dfaac13";
-  try {
-    const response = await fetch(`https://api.themoviedb.org/3/search/multi?query=${encodeURIComponent(query)}&api_key=${apiKey}`);
-    const data = await response.json();
-    return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
-  } catch (error) {
-    console.error("❌ Error searching movies:", error);
-    return new Response(JSON.stringify({ error: "Failed to fetch search results", message: error.message, data: [] }), { status: 500, headers: { "Content-Type": "application/json" } });
-  }
-}
-
-// ✅ Generate Home Page (FIXED)
+// ✅ Fixed generateHomePage() Function
 async function generateHomePage(env) {
   const trendingResponse = await fetchTrendingMovies(env);
   const trendingData = await trendingResponse.json().catch(() => []);
 
   if (!Array.isArray(trendingData)) {
     console.error("❌ Invalid Trending Data:", trendingData);
-    return `<h1>Trending Movies Unavailable</h1>`;
+    return `<h1>Error: Failed to load trending movies.</h1>`;
   }
 
   let movieListHTML = trendingData.map(movie => `
@@ -103,38 +89,6 @@ async function generateHomePage(env) {
   `;
 }
 
-// ✅ Movie Player Page
-async function generatePlayerPage(id) {
-  return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>FreeStream - Player</title>
-      <style>
-        body { font-family: Arial, sans-serif; background: #000; color: #fff; text-align: center; }
-        iframe { width: 100%; height: 500px; border: none; }
-        .details { margin-top: 20px; font-size: 1.2em; }
-      </style>
-      <script>
-        async function loadMovieDetails() {
-          const response = await fetch("https://api.themoviedb.org/3/movie/${id}?api_key=43d89010b257341339737be36dfaac13");
-          const data = await response.json();
-          document.getElementById("details").innerHTML = "<strong>" + data.title + "</strong><br>" + data.overview;
-        }
-        window.onload = loadMovieDetails;
-      </script>
-    </head>
-    <body>
-      <h1>🎬 Now Playing</h1>
-      <iframe allowfullscreen src="https://vidsrc.dev/embed/movie/${id}"></iframe>
-      <div class="details" id="details">Loading movie details...</div>
-    </body>
-    </html>
-  `;
-}
-
 // ✅ IPTV Player Page
 async function generateIPTVPage() {
   return `
@@ -149,7 +103,7 @@ async function generateIPTVPage() {
         video { width: 80%; height: 500px; margin-top: 20px; }
       </style>
       <script>
-        async function loadIPTV() {
+        function loadIPTV() {
           document.getElementById("player").src = "https://iptv-org.github.io/iptv/index.m3u";
         }
       </script>
