@@ -2,11 +2,11 @@ export default {
   async fetch(request) {
     const url = new URL(request.url);
     const path = url.pathname;
-    
-    // TMDB API Key
+
+    // TMDB API Key (Only for Indian Content)
     const TMDB_API_KEY = "43d89010b257341339737be36dfaac13";
 
-    // Homepage Data Fetching
+    // Homepage Sections (Netflix-Style)
     if (path === "/") {
       return fetchHomepageData();
     }
@@ -17,13 +17,13 @@ export default {
       return searchTMDB(query);
     }
 
-    // Movie Play Page
+    // Play Page - Movies
     if (path.startsWith("/play/movie/")) {
       const movieId = path.split("/play/movie/")[1];
       return fetchMovieDetails(movieId);
     }
 
-    // Web Series Play Page
+    // Play Page - Web Series
     if (path.startsWith("/play/series/")) {
       const params = new URLSearchParams(url.search);
       const seriesId = path.split("/play/series/")[1];
@@ -32,11 +32,11 @@ export default {
       return fetchSeriesDetails(seriesId, season, episode);
     }
 
-    return new Response("Not Found", { status: 404 });
+    return new Response("404 Not Found", { status: 404 });
   },
 };
 
-// Function: Fetch Homepage Data (Trending, Bollywood, Hollywood, etc.)
+// ✅ Function: Fetch Homepage Data (Trending, Bollywood, Hollywood, etc.)
 async function fetchHomepageData() {
   const sections = [
     { name: "Trending in India", url: `https://api.themoviedb.org/3/trending/movie/day?api_key=${TMDB_API_KEY}&region=IN` },
@@ -56,7 +56,7 @@ async function fetchHomepageData() {
   return new Response(JSON.stringify(responseData), { headers: { "Content-Type": "application/json" } });
 }
 
-// Function: Search TMDB for Movies & TV Shows
+// ✅ Function: Search TMDB for Movies & TV Shows
 async function searchTMDB(query) {
   if (!query) return new Response(JSON.stringify({ error: "No search query provided" }), { headers: { "Content-Type": "application/json" } });
 
@@ -66,7 +66,7 @@ async function searchTMDB(query) {
   return new Response(JSON.stringify(searchResults), { headers: { "Content-Type": "application/json" } });
 }
 
-// Function: Fetch Movie Details
+// ✅ Function: Fetch Movie Details + Streaming API Links
 async function fetchMovieDetails(movieId) {
   const movieData = await fetch(`https://api.themoviedb.org/3/movie/${movieId}?api_key=${TMDB_API_KEY}`).then(res => res.json());
   const streamLinks = [
@@ -78,7 +78,7 @@ async function fetchMovieDetails(movieId) {
   return new Response(JSON.stringify({ movieData, streamLinks }), { headers: { "Content-Type": "application/json" } });
 }
 
-// Function: Fetch Web Series Details
+// ✅ Function: Fetch Web Series Details + Streaming API Links
 async function fetchSeriesDetails(seriesId, season, episode) {
   const seriesData = await fetch(`https://api.themoviedb.org/3/tv/${seriesId}?api_key=${TMDB_API_KEY}`).then(res => res.json());
   const streamLinks = [
