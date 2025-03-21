@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Play Movie</title>
+    <script src="https://cdn.jwplayer.com/libraries/your-jwplayer-key.js"></script>
+</head>
+<body>
+    <h2>Select a Source</h2>
+    <select id="sourceSelect">
+        <option value="vidsrc">VidSrc</option>
+        <option value="multiembed">MultiEmbed</option>
+        <option value="autoembed">AutoEmbed</option>
+        <option value="vidsrcme">VidSrc.me</option>
+        <option value="moviesapi">MoviesAPI</option>
+    </select>
+
+    <button onclick="playMovie()">Play</button>
+
+    <div id="player"></div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const imdbId = urlParams.get('id');
+
+        function getStreamUrl(apiType) {
+            const apis = {
+                vidsrc: `https://vidsrc.dev/embed/movie/${imdbId}`,
+                multiembed: `https://multiembed.mov/directstream.php?video_id=${imdbId}`,
+                autoembed: `https://player.autoembed.cc/embed/movie/${imdbId}`,
+                vidsrcme: `https://vidsrc.me/embed/${imdbId}`,
+                moviesapi: `https://moviesapi.club/movie/${imdbId}`
+            };
+            return apis[apiType];
+        }
+
+        function playMovie() {
+            const selectedApi = document.getElementById('sourceSelect').value;
+            const streamUrl = getStreamUrl(selectedApi);
+
+            jwplayer("player").setup({
+                file: streamUrl,
+                width: "100%",
+                aspectratio: "16:9",
+                autostart: true
+            });
+        }
+    </script>
+</body>
+</html>
