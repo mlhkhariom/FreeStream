@@ -1,127 +1,155 @@
 export default {
   async fetch(request) {
-    try {
-      const url = new URL(request.url);
-      const path = url.pathname;
+    const url = new URL(request.url);
+    const path = url.pathname;
 
-      if (path === "/") {
-        return new Response(await generateHomePage(), { headers: { "Content-Type": "text/html" } });
-      } else if (path.startsWith("/player/")) {
-        const id = path.split("/")[2];
-        return new Response(await generatePlayerPage(id), { headers: { "Content-Type": "text/html" } });
-      } else if (path === "/api/trending") {
-        return fetchTrendingMovies();
-      } else if (path.startsWith("/api/search")) {
-        const query = url.searchParams.get("q");
-        return fetchSearchResults(query);
-      }
-
-      return new Response("404 Not Found", { status: 404 });
-    } catch (error) {
-      return new Response("Internal Server Error: " + error.message, { status: 500 });
+    // **Homepage**
+    if (path === "/") {
+      return new Response(await generateHomepage(), {
+        headers: { "Content-Type": "text/html" },
+      });
     }
-  }
+
+    // **Play Page**
+    if (path.startsWith("/play/")) {
+      const contentId = path.split("/play/")[1];
+      return new Response(await generatePlayPage(contentId), {
+        headers: { "Content-Type": "text/html" },
+      });
+    }
+
+    return new Response("Not Found", { status: 404 });
+  },
 };
 
-// ✅ Fetch Trending Movies (TMDB API)
-async function fetchTrendingMovies() {
-  const apiKey = "43d89010b257341339737be36dfaac13";
-  const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${apiKey}`);
-  const data = await response.json();
-  return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
-}
+// **API Keys**
+const TMDB_API = "43d89010b257341339737be36dfaac13";
+const OMDB_API = "3ccc73c8";
+const TVDB_API = "1203f4ee-92a1-4962-8e70-fe5a3fe34460";
 
-// ✅ Search Movies & Shows (TMDB API)
-async function fetchSearchResults(query) {
-  if (!query) return new Response("Query Missing", { status: 400 });
-  const apiKey = "43d89010b257341339737be36dfaac13";
-  const response = await fetch(`https://api.themoviedb.org/3/search/multi?query=${query}&api_key=${apiKey}`);
-  const data = await response.json();
-  return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
-}
+// **Streaming API Endpoints**
+const STREAM_APIS = {
+  vidsrc: "https://vidsrc.xyz/embed/movie/",
+  multiembed: "https://multiembed.mov/?video_id=",
+  autoembed: "https://player.autoembed.cc/embed/movie/",
+  vidsrc_icu: "https://vidsrc.icu/embed/movie/",
+};
 
-// ✅ Home Page (Trending Movies & Search Option)
-async function generateHomePage() {
-  const trendingResponse = await fetchTrendingMovies();
-  const trendingData = await trendingResponse.json();
+// **Homepage HTML Generator**
+async function generateHomepage() {
+  const trendingMovies = await fetchTMDB("trending/movie/week");
+  const trendingTV = await fetchTMDB("trending/tv/week");
+  const hindiDubbed = await fetchTMDB("discover/movie", "&with_original_language=hi");
 
-  let movieListHTML = trendingData.map(movie => `
-    <div class="movie" onclick="window.location='/player/${movie.id}'">
-      <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" />
-      <h3>${movie.title || movie.name}</h3>
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <title>FreeCinema</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <style>
+      body { background: #141414; color: white; font-family: Arial, sans-serif; }
+      .container { max-width: 1200px; margin: auto; }
+      .hero-slider img { width: 100%; height: 400px; object-fit: cover; }
+      .movie-grid { display: flex; flex-wrap: wrap; gap: 15px; }
+      .movie-card { width: 150px; cursor: pointer; }
+      .movie-card img { width: 100%; border-radius: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>FreeCinema</h1>
+      
+      <div class="hero-slider">
+        <img src="${trendingMovies[0]?.poster_path}" alt="Featured Movie">
+      </div>
+
+      <h2>Trending Movies</h2>
+      <div class="movie-grid">
+        ${trendingMovies.map(movie => `
+          <div class="movie-card" onclick="location.href='/play/${movie.id}'">
+            <img src="https://image.tmdb.org/t/p/w200${movie.poster_path}" alt="${movie.title}">
+            <p>${movie.title}</p>
+          </div>`).join("")}
+      </div>
+
+      <h2>Trending TV Shows</h2>
+      <div class="movie-grid">
+        ${trendingTV.map(tv => `
+          <div class="movie-card" onclick="location.href='/play/${tv.id}'">
+            <img src="https://image.tmdb.org/t/p/w200${tv.poster_path}" alt="${tv.name}">
+            <p>${tv.name}</p>
+          </div>`).join("")}
+      </div>
+
+      <h2>Hindi Dubbed Movies</h2>
+      <div class="movie-grid">
+        ${hindiDubbed.map(movie => `
+          <div class="movie-card" onclick="location.href='/play/${movie.id}'">
+            <img src="https://image.tmdb.org/t/p/w200${movie.poster_path}" alt="${movie.title}">
+            <p>${movie.title}</p>
+          </div>`).join("")}
+      </div>
     </div>
-  `).join("");
-
-  return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>FreeCinema - Watch Free Movies & TV Shows</title>
-      <style>
-        body { font-family: Arial, sans-serif; background: #000; color: #fff; text-align: center; }
-        h1 { font-size: 2.5em; margin-top: 20px; }
-        input { padding: 10px; width: 80%; margin: 10px 0; }
-        button { padding: 10px 15px; background: red; color: white; border: none; cursor: pointer; }
-        .movie-list { display: flex; flex-wrap: wrap; justify-content: center; }
-        .movie { margin: 10px; cursor: pointer; width: 200px; }
-        .movie img { width: 100%; border-radius: 10px; }
-      </style>
-      <script>
-        async function searchMovies() {
-          const query = document.getElementById('searchBox').value;
-          const response = await fetch('/api/search?q=' + query);
-          const data = await response.json();
-          document.getElementById('movies').innerHTML = data.map(movie => \`
-            <div class="movie" onclick="window.location='/player/\${movie.id}'">
-              <img src="https://image.tmdb.org/t/p/w500\${movie.poster_path}" />
-              <h3>\${movie.title || movie.name}</h3>
-            </div>
-          \`).join("");
-        }
-      </script>
-    </head>
-    <body>
-      <h1>🎬 FreeCinema</h1>
-      <input type="text" id="searchBox" placeholder="Search movies, TV shows..." />
-      <button onclick="searchMovies()">Search</button>
-      <h2>Trending Now</h2>
-      <div class="movie-list" id="movies">${movieListHTML}</div>
-    </body>
-    </html>
-  `;
+  </body>
+  </html>`;
 }
 
-// ✅ Player Page (Movie Streaming)
-async function generatePlayerPage(id) {
-  return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>FreeCinema - Player</title>
-      <style>
-        body { font-family: Arial, sans-serif; background: #000; color: #fff; text-align: center; }
-        iframe { width: 100%; height: 500px; border: none; }
-        .details { margin-top: 20px; font-size: 1.2em; }
-      </style>
-      <script>
-        async function loadMovieDetails() {
-          const response = await fetch("https://api.themoviedb.org/3/movie/${id}?api_key=43d89010b257341339737be36dfaac13");
-          const data = await response.json();
-          document.getElementById("details").innerHTML = "<strong>" + data.title + "</strong><br>" + data.overview;
-        }
+// **Play Page Generator**
+async function generatePlayPage(contentId) {
+  const movie = await fetchTMDB(`movie/${contentId}`);
+  const imdbId = movie.imdb_id;
 
-        window.onload = loadMovieDetails;
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <title>${movie.title} - Watch Now</title>
+    <script src="https://cdn.jwplayer.com/libraries/your-jwplayer-key.js"></script>
+    <style>
+      body { background: #141414; color: white; font-family: Arial, sans-serif; }
+      .container { max-width: 1200px; margin: auto; }
+      .player-container { width: 100%; height: 500px; margin-bottom: 20px; }
+      .source-buttons { margin-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>${movie.title}</h1>
+      <p>${movie.overview}</p>
+      <p><strong>Director:</strong> ${movie.director}</p>
+      <p><strong>Actors:</strong> ${movie.actors.join(", ")}</p>
+
+      <div class="player-container" id="player"></div>
+      
+      <div class="source-buttons">
+        <button onclick="changeSource('${STREAM_APIS.vidsrc}${imdbId}')">VidSrc</button>
+        <button onclick="changeSource('${STREAM_APIS.multiembed}${imdbId}')">MultiEmbed</button>
+        <button onclick="changeSource('${STREAM_APIS.autoembed}${imdbId}')">AutoEmbed</button>
+        <button onclick="changeSource('${STREAM_APIS.vidsrc_icu}${imdbId}')">VidSrc ICU</button>
+      </div>
+
+      <script>
+        function changeSource(url) {
+          jwplayer("player").setup({
+            file: url,
+            width: "100%",
+            height: "100%",
+            autostart: true,
+            controls: true
+          });
+        }
+        changeSource('${STREAM_APIS.vidsrc}${imdbId}');
       </script>
-    </head>
-    <body>
-      <h1>🎬 Now Playing</h1>
-      <iframe allowfullscreen src="https://vidsrc.dev/embed/movie/${id}"></iframe>
-      <div class="details" id="details">Loading movie details...</div>
-    </body>
-    </html>
-  `;
+    </div>
+  </body>
+  </html>`;
+}
+
+// **Fetch TMDB API**
+async function fetchTMDB(endpoint, extraParams = "") {
+  const response = await fetch(`https://api.themoviedb.org/3/${endpoint}?api_key=${TMDB_API}${extraParams}`);
+  const data = await response.json();
+  return data.results || data;
 }
