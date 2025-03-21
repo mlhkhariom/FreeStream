@@ -23,15 +23,23 @@ export default {
   }
 };
 
-// ✅ Fetch Trending Movies (TMDB API)
+// 🔹 Fetch Trending Movies (Optimized with Caching)
 async function fetchTrendingMovies() {
   const apiKey = "43d89010b257341339737be36dfaac13";
+  const cacheKey = "trending-movies";
+  
+  let cache = await caches.default.match(cacheKey);
+  if (cache) return cache;
+
   const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${apiKey}`);
   const data = await response.json();
-  return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
+  let res = new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
+
+  caches.default.put(cacheKey, res.clone());
+  return res;
 }
 
-// ✅ Search Movies & Shows (TMDB API)
+// 🔹 Search Movies & Shows
 async function fetchSearchResults(query) {
   if (!query) return new Response("Query Missing", { status: 400 });
   const apiKey = "43d89010b257341339737be36dfaac13";
@@ -40,7 +48,7 @@ async function fetchSearchResults(query) {
   return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
 }
 
-// ✅ Home Page (Trending Movies & Search Option)
+// 🔹 Home Page with Trending Movies
 async function generateHomePage() {
   const trendingResponse = await fetchTrendingMovies();
   const trendingData = await trendingResponse.json();
@@ -60,7 +68,7 @@ async function generateHomePage() {
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>FreeCinema - Watch Free Movies & TV Shows</title>
       <style>
-        body { font-family: Arial, sans-serif; background: #000; color: #fff; text-align: center; }
+        body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; }
         h1 { font-size: 2.5em; margin-top: 20px; }
         input { padding: 10px; width: 80%; margin: 10px 0; }
         button { padding: 10px 15px; background: red; color: white; border: none; cursor: pointer; }
@@ -93,7 +101,7 @@ async function generateHomePage() {
   `;
 }
 
-// ✅ Player Page (Movie Streaming)
+// 🔹 Movie Player Page
 async function generatePlayerPage(id) {
   return `
     <!DOCTYPE html>
