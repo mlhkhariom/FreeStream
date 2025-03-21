@@ -31,13 +31,34 @@ async function fetchTrendingMovies(env) {
   const apiKey = "43d89010b257341339737be36dfaac13";
   const cacheKey = "trending-movies";
 
-  let cache = await env.FREESTREAM_CACHE.get(cacheKey);
-  if (cache) return new Response(cache, { headers: { "Content-Type": "application/json" } });
+  // 🔹 Check KV Binding First
+  if (!env.FREESTREAM_CACHE) {
+    console.log("❌ KV Namespace FREESTREAM_CACHE Not Found!");
+    return new Response("Internal Server Error: KV Namespace Missing", { status: 500 });
+  }
 
-  const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${apiKey}`);
-  const data = await response.json();
-  await env.FREESTREAM_CACHE.put(cacheKey, JSON.stringify(data.results), { expirationTtl: 86400 }); // Cache for 24 hours
-  return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
+  try {
+    // 🔹 Fetch Cached Data from KV
+    let cache = await env.FREESTREAM_CACHE.get(cacheKey);
+    if (cache) {
+      console.log("✅ Returning Cached Trending Movies");
+      return new Response(cache, { headers: { "Content-Type": "application/json" } });
+    }
+
+    // 🔹 Fetch from TMDB if No Cache
+    console.log("🌍 Fetching Fresh Trending Movies from TMDB...");
+    const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${apiKey}`);
+    const data = await response.json();
+
+    // 🔹 Store Data in KV for 24 Hours
+    await env.FREESTREAM_CACHE.put(cacheKey, JSON.stringify(data.results), { expirationTtl: 86400 });
+
+    console.log("✅ Trending Movies Cached in KV");
+    return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
+  } catch (error) {
+    console.log("❌ Error Fetching Trending Movies:", error.message);
+    return new Response("Internal Server Error: " + error.message, { status: 500 });
+  }
 }
 
 // ✅ Search Movies & Shows (Real-Time Fetch)
