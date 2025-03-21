@@ -1,0 +1,24 @@
+body {
+    background: #141414;
+    color: white;
+    font-family: Arial, sans-serif;
+}
+header {
+    display: flex;
+    justify-content: space-between;
+    padding: 20px;
+}
+.slider {
+    margin: 20px;
+}
+.scroll-container {
+    display: flex;
+    overflow-x: scroll;
+}
+.movie-card {
+    margin: 10px;
+    width: 150px;
+}
+.movie-card img {
+    width: 100%;
+}
