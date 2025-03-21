@@ -20,7 +20,7 @@ export default {
 
       return new Response("404 Not Found", { status: 404 });
     } catch (error) {
-      console.log("Worker Error:", error.message);
+      console.log("❌ Worker Error:", error.message);
       return new Response("Internal Server Error: " + error.message, { status: 500 });
     }
   }
@@ -31,26 +31,26 @@ async function fetchTrendingMovies(env) {
   const apiKey = "43d89010b257341339737be36dfaac13";
   const cacheKey = "trending-movies";
 
-  // 🔹 Check KV Binding First
+  // 🔹 Check if KV is available
   if (!env.FREESTREAM_CACHE) {
     console.log("❌ KV Namespace FREESTREAM_CACHE Not Found!");
     return new Response("Internal Server Error: KV Namespace Missing", { status: 500 });
   }
 
   try {
-    // 🔹 Fetch Cached Data from KV
+    // 🔹 Check KV Cache First
     let cache = await env.FREESTREAM_CACHE.get(cacheKey);
     if (cache) {
       console.log("✅ Returning Cached Trending Movies");
       return new Response(cache, { headers: { "Content-Type": "application/json" } });
     }
 
-    // 🔹 Fetch from TMDB if No Cache
+    // 🔹 Fetch from TMDB API
     console.log("🌍 Fetching Fresh Trending Movies from TMDB...");
-    const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${apiKey}`);
+    const response = await fetch(`https://api.themoviedb.org/3/trending/movie/week?api_key=${apiKey}`);
     const data = await response.json();
 
-    // 🔹 Store Data in KV for 24 Hours
+    // 🔹 Store in KV for 24 Hours
     await env.FREESTREAM_CACHE.put(cacheKey, JSON.stringify(data.results), { expirationTtl: 86400 });
 
     console.log("✅ Trending Movies Cached in KV");
@@ -61,16 +61,18 @@ async function fetchTrendingMovies(env) {
   }
 }
 
-// ✅ Search Movies & Shows (Real-Time Fetch)
+// ✅ Search Movies & Shows
 async function fetchSearchResults(query, env) {
   if (!query) return new Response("Query Missing", { status: 400 });
+
   const apiKey = "43d89010b257341339737be36dfaac13";
   const response = await fetch(`https://api.themoviedb.org/3/search/multi?query=${query}&api_key=${apiKey}`);
   const data = await response.json();
+
   return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
 }
 
-// ✅ Home Page with Trending Movies
+// ✅ Generate Home Page
 async function generateHomePage(env) {
   const trendingResponse = await fetchTrendingMovies(env);
   const trendingData = await trendingResponse.json();
@@ -123,7 +125,7 @@ async function generateHomePage(env) {
   `;
 }
 
-// ✅ Movie Player Page
+// ✅ Generate Movie Player Page
 async function generatePlayerPage(id, env) {
   return `
     <!DOCTYPE html>
