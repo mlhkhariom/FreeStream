@@ -13,6 +13,8 @@ export default {
         return new Response(await generateIPTVPage(env), { headers: { "Content-Type": "text/html" } });
       } else if (path.startsWith("/api/iptv-channels")) {
         return fetchIPTVChannels(request);
+      } else if (path === "/api/trending") {
+        return fetchTrendingMovies(env);
       }
 
       return new Response("404 Not Found", { status: 404 });
@@ -22,7 +24,84 @@ export default {
   }
 };
 
-// ✅ IPTV Page with Channel List
+// ✅ Fetch Trending Movies
+async function fetchTrendingMovies(env) {
+  const apiKey = "43d89010b257341339737be36dfaac13";
+
+  try {
+    const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${apiKey}`);
+    const data = await response.json();
+    return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
+  } catch (error) {
+    return new Response("Internal Server Error: " + error.message, { status: 500 });
+  }
+}
+
+// ✅ Generate Homepage
+async function generateHomePage(env) {
+  const trendingResponse = await fetchTrendingMovies(env);
+  const trendingData = await trendingResponse.json();
+
+  let movieListHTML = trendingData.map(movie => `
+    <div class="movie" onclick="window.location='/player/${movie.id}'">
+      <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" />
+      <h3>${movie.title || movie.name}</h3>
+    </div>
+  `).join("");
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>OTT & IPTV</title>
+      <script src="https://cdn.jwplayer.com/libraries/IDzF9Zmk.js"></script>
+      <style>
+        body { font-family: Arial, sans-serif; background: #121212; color: white; text-align: center; }
+        .movie { display: inline-block; margin: 10px; cursor: pointer; width: 200px; }
+        .movie img { width: 100%; border-radius: 10px; }
+      </style>
+    </head>
+    <body>
+      <h1>🎬 Trending Movies & Web Series</h1>
+      <div>${movieListHTML}</div>
+      <h2><a href="/iptv">📺 Live IPTV</a></h2>
+    </body>
+    </html>
+  `;
+}
+
+// ✅ Movie Player Page
+async function generatePlayerPage(id, env) {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Player</title>
+      <script src="https://cdn.jwplayer.com/libraries/IDzF9Zmk.js"></script>
+      <style> body { text-align: center; background: #000; color: white; } </style>
+      <script>
+        function playMovie() {
+          jwplayer("player").setup({
+            file: "https://vidsrc.dev/embed/movie/${id}",
+            type: "hls",
+            width: "100%",
+            height: "500px",
+            autostart: true
+          });
+        }
+      </script>
+    </head>
+    <body onload="playMovie()">
+      <h1>🎬 Now Playing</h1>
+      <div id="player"></div>
+    </body>
+    </html>
+  `;
+}
+
+// ✅ IPTV Page
 async function generateIPTVPage(env) {
   return `
     <!DOCTYPE html>
@@ -33,7 +112,6 @@ async function generateIPTVPage(env) {
       <script src="https://cdn.jwplayer.com/libraries/IDzF9Zmk.js"></script>
       <style>
         body { font-family: Arial, sans-serif; background: #121212; color: white; text-align: center; }
-        h1 { font-size: 2em; margin-top: 20px; }
         select, button { padding: 10px; margin: 10px; }
         .channel-list { max-height: 400px; overflow-y: auto; text-align: left; padding: 10px; border: 1px solid white; }
         .channel { cursor: pointer; padding: 8px; border-bottom: 1px solid #444; }
@@ -71,9 +149,6 @@ async function generateIPTVPage(env) {
         <option value="https://iptv-org.github.io/iptv/countries/us.m3u">🇺🇸 USA</option>
         <option value="https://iptv-org.github.io/iptv/countries/uk.m3u">🇬🇧 UK</option>
         <option value="https://iptv-org.github.io/iptv/categories/movies.m3u">🎥 Movies</option>
-        <option value="https://iptv-org.github.io/iptv/categories/news.m3u">📰 News</option>
-        <option value="https://iptv-org.github.io/iptv/categories/sports.m3u">⚽ Sports</option>
-        <option value="https://iptv-org.github.io/iptv/categories/music.m3u">🎵 Music</option>
       </select>
       <div class="channel-list" id="channelList">Select a category to load channels...</div>
       <h2>Now Playing</h2>
@@ -111,4 +186,4 @@ async function fetchIPTVChannels(request) {
   } catch (error) {
     return new Response(JSON.stringify({ error: "Failed to load channels" }), { status: 500 });
   }
-}
+    }
