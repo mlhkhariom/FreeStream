@@ -1,8 +1,24 @@
-# wrangler.toml
-name = 'freestream'
+
 # wrangler.toml (wrangler v3.88.0^)
 [observability.logs]
 enabled = true
+name = "freestream"
+type = "javascript"
 
+account_id = "76cd338b79022e02985b198da023a0c4"
+workers_dev = true
+compatibility_date = "2025-03-21"
+
+# ✅ Set Main Worker Script to worker.js
+main = "worker.js"
+
+# ✅ Bind KV Namespaces
+[[kv_namespaces]]
+binding = "FREESTREAM_CACHE"
+id = "9ba34933cd2f427c8e738262484db23c"
+
+[[kv_namespaces]]
+binding = "USER_WATCHLIST"
+id = "18168cf2b7124d70bf18947b207d6ee1"
 
 
