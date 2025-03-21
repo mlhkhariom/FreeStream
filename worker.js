@@ -8,7 +8,7 @@ export default {
         return new Response(await generateHomePage(env), { headers: { "Content-Type": "text/html" } });
       } else if (path.startsWith("/player/")) {
         const id = path.split("/")[2];
-        return new Response(await generatePlayerPage(id, env), { headers: { "Content-Type": "text/html" } });
+        return new Response(await generatePlayerPage(id), { headers: { "Content-Type": "text/html" } });
       } else if (path === "/iptv") {
         return new Response(await generateIPTVPage(), { headers: { "Content-Type": "text/html" } });
       } else if (path === "/api/trending") {
@@ -26,7 +26,7 @@ export default {
   }
 };
 
-// ✅ Fetch Trending Movies
+// ✅ Fetch Trending Movies (FIXED)
 async function fetchTrendingMovies(env) {
   const apiKey = "43d89010b257341339737be36dfaac13";
   try {
@@ -34,10 +34,12 @@ async function fetchTrendingMovies(env) {
     if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
 
     const data = await response.json();
+    if (!data.results || !Array.isArray(data.results)) throw new Error("Invalid API Response");
+
     return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
   } catch (error) {
     console.error("❌ Error fetching trending movies:", error);
-    return new Response(JSON.stringify({ error: "Failed to fetch trending movies", message: error.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "Failed to fetch trending movies", message: error.message, data: [] }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
 }
 
@@ -52,14 +54,19 @@ async function fetchSearchResults(query) {
     return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
   } catch (error) {
     console.error("❌ Error searching movies:", error);
-    return new Response(JSON.stringify({ error: "Failed to fetch search results", message: error.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "Failed to fetch search results", message: error.message, data: [] }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
 }
 
-// ✅ Generate Home Page
+// ✅ Generate Home Page (FIXED)
 async function generateHomePage(env) {
   const trendingResponse = await fetchTrendingMovies(env);
   const trendingData = await trendingResponse.json().catch(() => []);
+
+  if (!Array.isArray(trendingData)) {
+    console.error("❌ Invalid Trending Data:", trendingData);
+    return `<h1>Trending Movies Unavailable</h1>`;
+  }
 
   let movieListHTML = trendingData.map(movie => `
     <div class="movie" onclick="window.location='/player/${movie.id}'">
