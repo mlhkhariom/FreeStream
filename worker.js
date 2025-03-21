@@ -15,40 +15,44 @@ const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
 async function fetchTMDB(endpoint, params = {}) {
   params.api_key = TMDB_API_KEY;
-  params.language = "hi-IN"; // Fetch only Indian content
+  params.language = "en-US";
+  params.region = "IN"; // Only fetch Indian content
   const url = `${TMDB_BASE_URL}/${endpoint}?` + new URLSearchParams(params);
   const response = await fetch(url);
   return response.ok ? await response.json() : null;
 }
 
 async function generateHomePage() {
-  const featured = await fetchTMDB("movie/popular", { region: "IN" });
-  const trending = await fetchTMDB("trending/movie/week", { region: "IN" });
-  const newReleases = await fetchTMDB("movie/now_playing", { region: "IN" });
-  const topRated = await fetchTMDB("movie/top_rated", { region: "IN" });
+  const featured = await fetchTMDB("movie/popular");
+  const trending = await fetchTMDB("trending/movie/week");
+  const newReleases = await fetchTMDB("movie/now_playing");
+  const topRated = await fetchTMDB("movie/top_rated");
 
   return `
     <html>
       <head>
         <title>FreeCinema</title>
         <style>
-          body { background: black; color: white; font-family: Arial; }
-          .slider { overflow-x: scroll; white-space: nowrap; }
-          .movie { display: inline-block; width: 200px; margin: 10px; }
-          .movie img { width: 100%; }
+          body { background: #000; color: white; font-family: Arial; padding: 0; margin: 0; }
           .header { background: #111; padding: 20px; font-size: 24px; text-align: center; }
+          .slider { overflow-x: scroll; white-space: nowrap; padding: 10px; }
+          .movie { display: inline-block; width: 150px; margin: 5px; }
+          .movie img { width: 100%; border-radius: 5px; }
+          .section-title { font-size: 20px; padding: 10px; }
+          .footer { background: #111; padding: 10px; text-align: center; font-size: 14px; }
         </style>
       </head>
       <body>
         <div class="header">FreeCinema - Watch Indian Movies</div>
-        <h2>Featured</h2>
+        <h2 class="section-title">Featured</h2>
         <div class="slider">${generateMovieList(featured?.results)}</div>
-        <h2>Trending</h2>
+        <h2 class="section-title">Trending</h2>
         <div class="slider">${generateMovieList(trending?.results)}</div>
-        <h2>New Releases</h2>
+        <h2 class="section-title">New Releases</h2>
         <div class="slider">${generateMovieList(newReleases?.results)}</div>
-        <h2>Top Rated</h2>
+        <h2 class="section-title">Top Rated</h2>
         <div class="slider">${generateMovieList(topRated?.results)}</div>
+        <div class="footer">© 2025 FreeCinema</div>
       </body>
     </html>
   `;
@@ -82,8 +86,8 @@ async function generatePlayPage(movieId) {
       <head>
         <title>${movie.title} - Watch Now</title>
         <style>
-          body { background: black; color: white; font-family: Arial; text-align: center; }
-          .player { width: 80%; height: 400px; margin: auto; background: #222; }
+          body { background: black; color: white; font-family: Arial; text-align: center; padding: 0; margin: 0; }
+          .player { width: 90%; height: 400px; margin: auto; background: #222; }
           .details { padding: 20px; text-align: left; }
           .actors { display: flex; overflow-x: scroll; white-space: nowrap; }
           .actors div { margin: 10px; text-align: center; }
