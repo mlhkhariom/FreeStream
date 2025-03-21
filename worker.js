@@ -13,6 +13,8 @@ export default {
         return new Response(await generateIPTVPage(), { headers: { "Content-Type": "text/html" } });
       } else if (path === "/api/trending") {
         return fetchTrendingMovies(env);
+      } else if (path === "/api/iptv-channels") {
+        return fetchIPTVChannels();
       }
 
       return new Response(JSON.stringify({ error: "Not Found" }), { status: 404, headers: { "Content-Type": "application/json" } });
@@ -23,73 +25,45 @@ export default {
   }
 };
 
-// ✅ Fixed fetchTrendingMovies() Function
-async function fetchTrendingMovies(env) {
-  const apiKey = "43d89010b257341339737be36dfaac13";
+// ✅ Fetch IPTV Channel List from GitHub
+async function fetchIPTVChannels() {
   try {
-    const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${apiKey}`);
-    
+    const response = await fetch("https://iptv-org.github.io/iptv/index.m3u");
     if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
 
-    const data = await response.json();
+    const m3uText = await response.text();
+    const channels = parseM3U(m3uText);
 
-    if (!data || !data.results || !Array.isArray(data.results)) {
-      throw new Error("Invalid API response format");
-    }
-
-    return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(channels), { headers: { "Content-Type": "application/json" } });
   } catch (error) {
-    console.error("❌ Error fetching trending movies:", error);
-    return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } }); // Returns empty array instead of crashing
+    console.error("❌ Error Fetching IPTV Channels:", error);
+    return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
   }
 }
 
-// ✅ Fixed generateHomePage() Function
-async function generateHomePage(env) {
-  const trendingResponse = await fetchTrendingMovies(env);
-  const trendingData = await trendingResponse.json().catch(() => []);
+// ✅ Parse M3U File to Extract Channel List
+function parseM3U(m3uText) {
+  const lines = m3uText.split("\n");
+  const channels = [];
+  let currentChannel = null;
 
-  if (!Array.isArray(trendingData)) {
-    console.error("❌ Invalid Trending Data:", trendingData);
-    return `<h1>Error: Failed to load trending movies.</h1>`;
-  }
+  lines.forEach(line => {
+    if (line.startsWith("#EXTINF")) {
+      const nameMatch = line.match(/,(.*)/);
+      if (nameMatch) {
+        currentChannel = { name: nameMatch[1], url: "" };
+      }
+    } else if (line.startsWith("http") && currentChannel) {
+      currentChannel.url = line.trim().replace(".m3u", ".m3u8");
+      channels.push(currentChannel);
+      currentChannel = null;
+    }
+  });
 
-  let movieListHTML = trendingData.map(movie => `
-    <div class="movie" onclick="window.location='/player/${movie.id}'">
-      <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" />
-      <h3>${movie.title || movie.name}</h3>
-    </div>
-  `).join("");
-
-  return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>FreeStream - Home</title>
-      <style>
-        body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; }
-        .container { margin: 20px; }
-        .btn { padding: 10px 15px; background: red; color: white; border: none; cursor: pointer; margin: 10px; }
-        .movie-list { display: flex; flex-wrap: wrap; justify-content: center; }
-        .movie { margin: 10px; cursor: pointer; width: 200px; }
-        .movie img { width: 100%; border-radius: 10px; }
-      </style>
-    </head>
-    <body>
-      <h1>🎬 FreeStream</h1>
-      <div class="container">
-        <button class="btn" onclick="window.location='/iptv'">📺 Watch Live TV</button>
-      </div>
-      <h2>Trending Movies & Shows</h2>
-      <div class="movie-list" id="movies">${movieListHTML}</div>
-    </body>
-    </html>
-  `;
+  return channels;
 }
 
-// ✅ IPTV Player Page
+// ✅ IPTV Player Page with JW Player
 async function generateIPTVPage() {
   return `
     <!DOCTYPE html>
@@ -98,19 +72,41 @@ async function generateIPTVPage() {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>FreeStream - IPTV</title>
+      <script src="https://cdn.jwplayer.com/libraries/IDzF9Zmk.js"></script>
       <style>
         body { font-family: Arial, sans-serif; background: #000; color: #fff; text-align: center; }
-        video { width: 80%; height: 500px; margin-top: 20px; }
+        .container { margin: 20px; }
+        .channel-list { display: flex; flex-wrap: wrap; justify-content: center; }
+        .channel { padding: 10px; background: #222; margin: 5px; cursor: pointer; border-radius: 5px; }
+        #player { width: 80%; height: 500px; margin-top: 20px; }
       </style>
       <script>
-        function loadIPTV() {
-          document.getElementById("player").src = "https://iptv-org.github.io/iptv/index.m3u";
+        async function loadChannels() {
+          const response = await fetch("/api/iptv-channels");
+          const channels = await response.json();
+          document.getElementById("channelList").innerHTML = channels.map(channel => \`
+            <div class="channel" onclick="playChannel('\${channel.url}')">\${channel.name}</div>
+          \`).join("");
         }
+
+        function playChannel(url) {
+          jwplayer("player").setup({
+            file: url,
+            autostart: true,
+            width: "100%",
+            height: 500,
+            stretching: "uniform"
+          });
+        }
+
+        window.onload = loadChannels;
       </script>
     </head>
-    <body onload="loadIPTV()">
+    <body>
       <h1>📺 Live TV</h1>
-      <video id="player" controls autoplay></video>
+      <div id="player"></div>
+      <h2>Select a Channel</h2>
+      <div class="channel-list" id="channelList">Loading channels...</div>
     </body>
     </html>
   `;
