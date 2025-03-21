@@ -16,26 +16,21 @@ export default {
       } else if (path.startsWith("/api/search")) {
         const query = url.searchParams.get("q");
         return fetchSearchResults(query, env);
-      } else if (path.startsWith("/api/iptv")) {
-        return fetchIPTVChannels();
+      } else if (path.startsWith("/api/convert-m3u")) {
+        return convertM3UToM3U8(request);
       }
 
       return new Response("404 Not Found", { status: 404 });
     } catch (error) {
-      console.log("Worker Error:", error.message);
       return new Response("Internal Server Error: " + error.message, { status: 500 });
     }
   }
 };
 
-// ✅ Fetch Trending Movies (Cache with KV)
+// ✅ Fetch Trending Movies
 async function fetchTrendingMovies(env) {
   const apiKey = "43d89010b257341339737be36dfaac13";
   const cacheKey = "trending-movies";
-
-  if (!env.FREESTREAM_CACHE) {
-    return new Response("Internal Server Error: KV Namespace Missing", { status: 500 });
-  }
 
   try {
     let cache = await env.FREESTREAM_CACHE.get(cacheKey);
@@ -60,12 +55,6 @@ async function fetchSearchResults(query, env) {
   return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
 }
 
-// ✅ Fetch IPTV Channels
-async function fetchIPTVChannels() {
-  const response = await fetch("https://iptv-org.github.io/iptv/index.m3u");
-  return new Response(await response.text(), { headers: { "Content-Type": "application/x-mpegURL" } });
-}
-
 // ✅ Home Page
 async function generateHomePage(env) {
   const trendingResponse = await fetchTrendingMovies(env);
@@ -84,20 +73,28 @@ async function generateHomePage(env) {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>FreeStream - Movies & Live TV</title>
-      <style>
-        body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; }
-        h1 { font-size: 2.5em; margin-top: 20px; }
-        .movie-list { display: flex; flex-wrap: wrap; justify-content: center; }
-        .movie { margin: 10px; cursor: pointer; width: 200px; }
-        .movie img { width: 100%; border-radius: 10px; }
-      </style>
+      <title>FreeStream</title>
+      <script>
+        async function searchMovies() {
+          const query = document.getElementById('searchBox').value;
+          const response = await fetch('/api/search?q=' + query);
+          const data = await response.json();
+          document.getElementById('movies').innerHTML = data.map(movie => \`
+            <div class="movie" onclick="window.location='/player/\${movie.id}'">
+              <img src="https://image.tmdb.org/t/p/w500\${movie.poster_path}" />
+              <h3>\${movie.title || movie.name}</h3>
+            </div>
+          \`).join("");
+        }
+      </script>
     </head>
     <body>
       <h1>🎬 FreeStream</h1>
-      <a href="/iptv">📺 Watch Live TV</a>
-      <h2>Trending Movies</h2>
-      <div class="movie-list">${movieListHTML}</div>
+      <input type="text" id="searchBox" placeholder="Search movies..." />
+      <button onclick="searchMovies()">Search</button>
+      <h2>Trending Now</h2>
+      <div class="movie-list" id="movies">${movieListHTML}</div>
+      <h2><a href="/iptv">📺 Watch Live TV</a></h2>
     </body>
     </html>
   `;
@@ -110,8 +107,7 @@ async function generatePlayerPage(id, env) {
     <html lang="en">
     <head>
       <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>FreeStream - Player</title>
+      <title>Watch Movie</title>
       <script src="https://cdn.jwplayer.com/libraries/IDzF9Zmk.js"></script>
     </head>
     <body>
@@ -120,6 +116,7 @@ async function generatePlayerPage(id, env) {
       <script>
         jwplayer("player").setup({
           file: "https://vidsrc.dev/embed/movie/${id}",
+          type: "hls",
           width: "100%",
           height: "500px",
           autostart: true
@@ -137,8 +134,7 @@ async function generateIPTVPage(env) {
     <html lang="en">
     <head>
       <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Live TV - FreeStream</title>
+      <title>Live TV</title>
       <script src="https://cdn.jwplayer.com/libraries/IDzF9Zmk.js"></script>
     </head>
     <body>
@@ -150,18 +146,50 @@ async function generateIPTVPage(env) {
       </select>
       <div id="player"></div>
       <script>
-        function changeChannel() {
+        async function getM3U8(url) {
+          let response = await fetch("/api/convert-m3u?url=" + encodeURIComponent(url));
+          let data = await response.json();
+          return data.m3u8 || url;
+        }
+
+        async function changeChannel() {
           let url = document.getElementById('channelList').value;
+          let streamURL = await getM3U8(url);
+
           jwplayer("player").setup({
-            file: url,
+            file: streamURL,
+            type: "hls",
             width: "100%",
             height: "500px",
             autostart: true
           });
         }
+
         changeChannel();
       </script>
     </body>
     </html>
   `;
 }
+
+// ✅ Convert M3U to M3U8 API
+async function convertM3UToM3U8(request) {
+  const url = new URL(request.url);
+  const m3uURL = url.searchParams.get("url");
+  
+  if (!m3uURL) return new Response(JSON.stringify({ error: "Missing M3U URL" }), { status: 400 });
+
+  try {
+    let response = await fetch(m3uURL);
+    let data = await response.text();
+    let m3u8Links = data.match(/http.*\.m3u8/g); 
+
+    if (!m3u8Links || m3u8Links.length === 0) {
+      return new Response(JSON.stringify({ error: "No playable streams found" }), { status: 404 });
+    }
+
+    return new Response(JSON.stringify({ m3u8: m3u8Links[0] }), { headers: { "Content-Type": "application/json" } });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: "Failed to fetch M3U data" }), { status: 500 });
+  }
+      }
