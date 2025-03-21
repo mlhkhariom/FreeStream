@@ -1,46 +1,47 @@
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     try {
       const url = new URL(request.url);
       const path = url.pathname;
 
       if (path === "/") {
-        return new Response(await generateHomePage(), { headers: { "Content-Type": "text/html" } });
+        return new Response(await generateHomePage(env), { headers: { "Content-Type": "text/html" } });
       } else if (path.startsWith("/player/")) {
         const id = path.split("/")[2];
-        return new Response(await generatePlayerPage(id), { headers: { "Content-Type": "text/html" } });
+        return new Response(await generatePlayerPage(id, env), { headers: { "Content-Type": "text/html" } });
       } else if (path === "/api/trending") {
-        return fetchTrendingMovies();
+        return fetchTrendingMovies(env);
       } else if (path.startsWith("/api/search")) {
         const query = url.searchParams.get("q");
-        return fetchSearchResults(query);
+        return fetchSearchResults(query, env);
+      } else if (path.startsWith("/api/watchlist")) {
+        return handleWatchlist(request, env);
       }
 
       return new Response("404 Not Found", { status: 404 });
     } catch (error) {
+      console.log("Worker Error:", error.message);
       return new Response("Internal Server Error: " + error.message, { status: 500 });
     }
   }
 };
 
-// 🔹 Fetch Trending Movies (Optimized with Caching)
-async function fetchTrendingMovies() {
+// ✅ Fetch Trending Movies (Uses KV for Cache)
+async function fetchTrendingMovies(env) {
   const apiKey = "43d89010b257341339737be36dfaac13";
   const cacheKey = "trending-movies";
-  
-  let cache = await caches.default.match(cacheKey);
-  if (cache) return cache;
+
+  let cache = await env.FREESTREAM_CACHE.get(cacheKey);
+  if (cache) return new Response(cache, { headers: { "Content-Type": "application/json" } });
 
   const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${apiKey}`);
   const data = await response.json();
-  let res = new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
-
-  caches.default.put(cacheKey, res.clone());
-  return res;
+  await env.FREESTREAM_CACHE.put(cacheKey, JSON.stringify(data.results), { expirationTtl: 86400 }); // Cache for 24 hours
+  return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
 }
 
-// 🔹 Search Movies & Shows
-async function fetchSearchResults(query) {
+// ✅ Search Movies & Shows (Real-Time Fetch)
+async function fetchSearchResults(query, env) {
   if (!query) return new Response("Query Missing", { status: 400 });
   const apiKey = "43d89010b257341339737be36dfaac13";
   const response = await fetch(`https://api.themoviedb.org/3/search/multi?query=${query}&api_key=${apiKey}`);
@@ -48,9 +49,9 @@ async function fetchSearchResults(query) {
   return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
 }
 
-// 🔹 Home Page with Trending Movies
-async function generateHomePage() {
-  const trendingResponse = await fetchTrendingMovies();
+// ✅ Home Page with Trending Movies
+async function generateHomePage(env) {
+  const trendingResponse = await fetchTrendingMovies(env);
   const trendingData = await trendingResponse.json();
 
   let movieListHTML = trendingData.map(movie => `
@@ -66,7 +67,7 @@ async function generateHomePage() {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>FreeCinema - Watch Free Movies & TV Shows</title>
+      <title>FreeStream - Watch Free Movies & TV Shows</title>
       <style>
         body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; }
         h1 { font-size: 2.5em; margin-top: 20px; }
@@ -91,7 +92,7 @@ async function generateHomePage() {
       </script>
     </head>
     <body>
-      <h1>🎬 FreeCinema</h1>
+      <h1>🎬 FreeStream</h1>
       <input type="text" id="searchBox" placeholder="Search movies, TV shows..." />
       <button onclick="searchMovies()">Search</button>
       <h2>Trending Now</h2>
@@ -101,15 +102,15 @@ async function generateHomePage() {
   `;
 }
 
-// 🔹 Movie Player Page
-async function generatePlayerPage(id) {
+// ✅ Movie Player Page
+async function generatePlayerPage(id, env) {
   return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>FreeCinema - Player</title>
+      <title>FreeStream - Player</title>
       <style>
         body { font-family: Arial, sans-serif; background: #000; color: #fff; text-align: center; }
         iframe { width: 100%; height: 500px; border: none; }
