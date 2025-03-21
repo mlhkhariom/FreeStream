@@ -55,7 +55,6 @@ async function generateHomePage(env) {
     <head>
       <meta charset="UTF-8">
       <title>OTT & IPTV</title>
-      <script src="https://cdn.jwplayer.com/libraries/IDzF9Zmk.js"></script>
       <style>
         body { font-family: Arial, sans-serif; background: #121212; color: white; text-align: center; }
         .movie { display: inline-block; margin: 10px; cursor: pointer; width: 200px; }
@@ -101,7 +100,7 @@ async function generatePlayerPage(id, env) {
   `;
 }
 
-// ✅ IPTV Page
+// ✅ IPTV Page (Updated with All Playlists)
 async function generateIPTVPage(env) {
   return `
     <!DOCTYPE html>
@@ -119,7 +118,7 @@ async function generateIPTVPage(env) {
       <script>
         async function fetchChannels() {
           let playlist = document.getElementById('playlistSelect').value;
-          let response = await fetch("/api/iptv-channels?playlist=" + playlist);
+          let response = await fetch("/api/iptv-channels?playlist=" + encodeURIComponent(playlist));
           let data = await response.json();
 
           let listHTML = data.channels.map(channel => \`
@@ -145,10 +144,11 @@ async function generateIPTVPage(env) {
     <body>
       <h1>📺 Live TV Channels</h1>
       <select id="playlistSelect" onchange="fetchChannels()">
-        <option value="https://iptv-org.github.io/iptv/countries/in.m3u">🇮🇳 India</option>
-        <option value="https://iptv-org.github.io/iptv/countries/us.m3u">🇺🇸 USA</option>
-        <option value="https://iptv-org.github.io/iptv/countries/uk.m3u">🇬🇧 UK</option>
-        <option value="https://iptv-org.github.io/iptv/categories/movies.m3u">🎥 Movies</option>
+        <option value="https://raw.githubusercontent.com/hmripon66/worldwide-by-techedubyte.com/main/worldwide%20iptv%20By%20Tech%20Edu%20Byte.m3u">🌍 Worldwide IPTV</option>
+        <option value="https://github.com/hmripon66/Indian-hindi-IPTV-by-Tech-Edu-Byte/raw/main/indian%20hindi">🇮🇳 Indian Hindi</option>
+        <option value="https://github.com/hmripon66/Sports-IPTV-by-Techedubyte/raw/main/sports%20by%20Tech%20Edu%20Byte.m3u">⚽ Sports IPTV</option>
+        <option value="https://github.com/hmripon66/JEO-IPTV-Playlist-By-Techedubyte/raw/main/j%2Bi%2BO%20IPTV%20by%20Tech%20Edu%20Byte.m3u">📡 JIO IPTV</option>
+        <option value="https://github.com/hmripon66/cartoon-iptv-by-TechEduByte/raw/main/Cartoon%20by%20techedubyte.m3u8">🎞️ Cartoon IPTV</option>
       </select>
       <div class="channel-list" id="channelList">Select a category to load channels...</div>
       <h2>Now Playing</h2>
@@ -184,6 +184,6 @@ async function fetchIPTVChannels(request) {
 
     return new Response(JSON.stringify({ channels }), { headers: { "Content-Type": "application/json" } });
   } catch (error) {
-    return new Response(JSON.stringify({ error: "Failed to load channels" }), { status: 500 });
+    return new Response("Failed to load channels", { status: 500 });
   }
-    }
+}
