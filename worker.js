@@ -1,91 +1,121 @@
 export default {
-  async fetch(request) {
-    const url = new URL(request.url);
-    const path = url.pathname;
+    async fetch(request) {
+        try {
+            const url = new URL(request.url);
+            const pathname = url.pathname;
 
-    // TMDB API Key (Only for Indian Content)
-    const TMDB_API_KEY = "43d89010b257341339737be36dfaac13";
+            // Homepage (Netflix/Amazon Prime Style)
+            if (pathname === "/") {
+                return new Response(await getHomePage(), { headers: { "Content-Type": "text/html" } });
+            }
 
-    // Homepage Sections (Netflix-Style)
-    if (path === "/") {
-      return fetchHomepageData();
+            // Movie Playback Page
+            if (pathname.startsWith("/play/")) {
+                const contentId = pathname.split("/play/")[1];
+                return new Response(await getPlayPage(contentId), { headers: { "Content-Type": "text/html" } });
+            }
+
+            // API Error
+            return new Response("404 - Not Found", { status: 404 });
+        } catch (error) {
+            return new Response(`Error: ${error.message}`, { status: 500 });
+        }
     }
-
-    // Search Functionality
-    if (path.startsWith("/search")) {
-      const query = url.searchParams.get("query");
-      return searchTMDB(query);
-    }
-
-    // Play Page - Movies
-    if (path.startsWith("/play/movie/")) {
-      const movieId = path.split("/play/movie/")[1];
-      return fetchMovieDetails(movieId);
-    }
-
-    // Play Page - Web Series
-    if (path.startsWith("/play/series/")) {
-      const params = new URLSearchParams(url.search);
-      const seriesId = path.split("/play/series/")[1];
-      const season = params.get("season") || 1;
-      const episode = params.get("episode") || 1;
-      return fetchSeriesDetails(seriesId, season, episode);
-    }
-
-    return new Response("404 Not Found", { status: 404 });
-  },
 };
 
-// ✅ Function: Fetch Homepage Data (Trending, Bollywood, Hollywood, etc.)
-async function fetchHomepageData() {
-  const sections = [
-    { name: "Trending in India", url: `https://api.themoviedb.org/3/trending/movie/day?api_key=${TMDB_API_KEY}&region=IN` },
-    { name: "Hollywood", url: `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&region=US` },
-    { name: "Bollywood", url: `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&region=IN&with_original_language=hi` },
-    { name: "South Indian", url: `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&region=IN&with_original_language=te,ta,ml,kn` },
-    { name: "Top Rated", url: `https://api.themoviedb.org/3/movie/top_rated?api_key=${TMDB_API_KEY}` },
-    { name: "Popular", url: `https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}` }
-  ];
+// TMDB API Configuration
+const TMDB_API_KEY = "43d89010b257341339737be36dfaac13";
+const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
-  let responseData = {};
-  for (const section of sections) {
-    const data = await fetch(section.url).then(res => res.json());
-    responseData[section.name] = data.results;
-  }
+// Fetch Homepage Data (Trending, Popular, Bollywood, Hollywood)
+async function getHomePage() {
+    const trending = await fetchTMDB(`/trending/all/week`);
+    const bollywood = await fetchTMDB(`/discover/movie?region=IN&with_original_language=hi`);
+    const hollywood = await fetchTMDB(`/discover/movie?region=US&with_original_language=en`);
+    const topRated = await fetchTMDB(`/movie/top_rated`);
 
-  return new Response(JSON.stringify(responseData), { headers: { "Content-Type": "application/json" } });
+    return `
+        <html>
+        <head>
+            <title>Red Xerox - Streaming Platform</title>
+            <style>
+                body { background: #141414; color: white; font-family: Arial, sans-serif; }
+                .container { width: 90%; margin: auto; }
+                .section { margin-bottom: 30px; }
+                h2 { border-bottom: 2px solid red; display: inline-block; }
+                .movies { display: flex; overflow-x: auto; gap: 10px; }
+                .movie img { width: 150px; height: 225px; border-radius: 10px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Red Xerox - Movie Streaming</h1>
+                ${createSection("Trending in India", trending)}
+                ${createSection("Bollywood", bollywood)}
+                ${createSection("Hollywood", hollywood)}
+                ${createSection("Top Rated", topRated)}
+            </div>
+        </body>
+        </html>
+    `;
 }
 
-// ✅ Function: Search TMDB for Movies & TV Shows
-async function searchTMDB(query) {
-  if (!query) return new Response(JSON.stringify({ error: "No search query provided" }), { headers: { "Content-Type": "application/json" } });
+// Fetch Movie Details & Play Page
+async function getPlayPage(contentId) {
+    const movie = await fetchTMDB(`/movie/${contentId}`);
+    const streamingUrls = [
+        `https://vidsrc.dev/embed/movie/${contentId}`,
+        `https://player.autoembed.cc/embed/movie/${contentId}`,
+        `https://multiembed.mov/?video_id=${contentId}`
+    ];
 
-  const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}`;
-  const searchResults = await fetch(searchUrl).then(res => res.json());
-  
-  return new Response(JSON.stringify(searchResults), { headers: { "Content-Type": "application/json" } });
+    return `
+        <html>
+        <head>
+            <title>${movie.title} - Watch Now</title>
+            <style>
+                body { background: #141414; color: white; font-family: Arial, sans-serif; }
+                .container { width: 90%; margin: auto; }
+                .player { text-align: center; margin-bottom: 20px; }
+                .details { padding: 20px; background: #222; border-radius: 10px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>${movie.title} (${movie.release_date.split("-")[0]})</h1>
+                <div class="player">
+                    <iframe src="${streamingUrls[0]}" width="100%" height="500px" allowfullscreen></iframe>
+                </div>
+                <div class="details">
+                    <h2>About the Movie</h2>
+                    <p>${movie.overview}</p>
+                    <h3>Genre: ${movie.genres.map(g => g.name).join(", ")}</h3>
+                    <h3>IMDb Rating: ${movie.vote_average}</h3>
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
 }
 
-// ✅ Function: Fetch Movie Details + Streaming API Links
-async function fetchMovieDetails(movieId) {
-  const movieData = await fetch(`https://api.themoviedb.org/3/movie/${movieId}?api_key=${TMDB_API_KEY}`).then(res => res.json());
-  const streamLinks = [
-    `https://vidsrc.dev/embed/movie/${movieId}`,
-    `https://multiembed.mov/directstream.php?video_id=${movieId}`,
-    `https://player.autoembed.cc/embed/movie/${movieId}`
-  ];
-
-  return new Response(JSON.stringify({ movieData, streamLinks }), { headers: { "Content-Type": "application/json" } });
+// Fetch Data from TMDB
+async function fetchTMDB(endpoint) {
+    const response = await fetch(`${TMDB_BASE_URL}${endpoint}?api_key=${TMDB_API_KEY}`);
+    return response.json();
 }
 
-// ✅ Function: Fetch Web Series Details + Streaming API Links
-async function fetchSeriesDetails(seriesId, season, episode) {
-  const seriesData = await fetch(`https://api.themoviedb.org/3/tv/${seriesId}?api_key=${TMDB_API_KEY}`).then(res => res.json());
-  const streamLinks = [
-    `https://vidsrc.dev/embed/tv/${seriesId}/${season}/${episode}`,
-    `https://multiembed.mov/directstream.php?video_id=${seriesId}&s=${season}&e=${episode}`,
-    `https://player.autoembed.cc/embed/tv/${seriesId}/${season}/${episode}`
-  ];
-
-  return new Response(JSON.stringify({ seriesData, streamLinks }), { headers: { "Content-Type": "application/json" } });
+// Create Movie Sections
+function createSection(title, data) {
+    return `
+        <div class="section">
+            <h2>${title}</h2>
+            <div class="movies">
+                ${data.results.map(movie => `
+                    <a href="/play/${movie.id}">
+                        <img src="https://image.tmdb.org/t/p/w500/${movie.poster_path}" alt="${movie.title}">
+                    </a>
+                `).join("")}
+            </div>
+        </div>
+    `;
 }
