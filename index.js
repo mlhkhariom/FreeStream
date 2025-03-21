@@ -1,24 +1,29 @@
 export default {
   async fetch(request) {
-    const url = new URL(request.url);
-    const path = url.pathname;
+    try {
+      const url = new URL(request.url);
+      const path = url.pathname;
 
-    if (path === "/") {
-      return new Response(await generateHomePage(), { headers: { "Content-Type": "text/html" } });
-    } else if (path.startsWith("/player/")) {
-      const id = path.split("/")[2];
-      return new Response(generatePlayerPage(id), { headers: { "Content-Type": "text/html" } });
-    } else if (path.startsWith("/api/trending")) {
-      return fetchTrendingMovies();
-    } else if (path.startsWith("/api/search")) {
-      const query = url.searchParams.get("q");
-      return fetchSearchResults(query);
+      if (path === "/") {
+        return new Response(await generateHomePage(), { headers: { "Content-Type": "text/html" } });
+      } else if (path.startsWith("/player/")) {
+        const id = path.split("/")[2];
+        return new Response(await generatePlayerPage(id), { headers: { "Content-Type": "text/html" } });
+      } else if (path === "/api/trending") {
+        return fetchTrendingMovies();
+      } else if (path.startsWith("/api/search")) {
+        const query = url.searchParams.get("q");
+        return fetchSearchResults(query);
+      }
+
+      return new Response("404 Not Found", { status: 404 });
+    } catch (error) {
+      return new Response("Internal Server Error: " + error.message, { status: 500 });
     }
-
-    return new Response("Not Found", { status: 404 });
   }
 };
 
+// ✅ Fetch Trending Movies (TMDB API)
 async function fetchTrendingMovies() {
   const apiKey = "43d89010b257341339737be36dfaac13";
   const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${apiKey}`);
@@ -26,6 +31,7 @@ async function fetchTrendingMovies() {
   return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
 }
 
+// ✅ Search Movies & Shows (TMDB API)
 async function fetchSearchResults(query) {
   if (!query) return new Response("Query Missing", { status: 400 });
   const apiKey = "43d89010b257341339737be36dfaac13";
@@ -34,9 +40,10 @@ async function fetchSearchResults(query) {
   return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
 }
 
+// ✅ Home Page (Trending Movies & Search Option)
 async function generateHomePage() {
-  const trending = await fetchTrendingMovies();
-  const trendingData = await trending.json();
+  const trendingResponse = await fetchTrendingMovies();
+  const trendingData = await trendingResponse.json();
 
   let movieListHTML = trendingData.map(movie => `
     <div class="movie" onclick="window.location='/player/${movie.id}'">
@@ -86,7 +93,8 @@ async function generateHomePage() {
   `;
 }
 
-function generatePlayerPage(id) {
+// ✅ Player Page (Movie Streaming)
+async function generatePlayerPage(id) {
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -116,4 +124,4 @@ function generatePlayerPage(id) {
     </body>
     </html>
   `;
-  }
+}
