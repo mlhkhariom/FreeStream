@@ -14,6 +14,8 @@ export default {
       } else if (path.startsWith("/api/search")) {
         const query = url.searchParams.get("q");
         return fetchSearchResults(query, env);
+      } else if (path.startsWith("/api/iptv")) {
+        return fetchIPTVChannels();
       } else if (path.startsWith("/api/watchlist")) {
         return handleWatchlist(request, env);
       }
@@ -26,53 +28,24 @@ export default {
   }
 };
 
-// ✅ Fetch Trending Movies (Uses KV for Cache)
-async function fetchTrendingMovies(env) {
-  const apiKey = "43d89010b257341339737be36dfaac13";
-  const cacheKey = "trending-movies";
-
-  // 🔹 Check if KV is available
-  if (!env.FREESTREAM_CACHE) {
-    console.log("❌ KV Namespace FREESTREAM_CACHE Not Found!");
-    return new Response("Internal Server Error: KV Namespace Missing", { status: 500 });
-  }
+// ✅ Fetch IPTV Channels from GitHub
+async function fetchIPTVChannels() {
+  const iptvUrl = "https://iptv-org.github.io/iptv/index.m3u";
 
   try {
-    // 🔹 Check KV Cache First
-    let cache = await env.FREESTREAM_CACHE.get(cacheKey);
-    if (cache) {
-      console.log("✅ Returning Cached Trending Movies");
-      return new Response(cache, { headers: { "Content-Type": "application/json" } });
-    }
+    console.log("🌍 Fetching IPTV Channels...");
+    const response = await fetch(iptvUrl);
+    if (!response.ok) throw new Error("Failed to fetch IPTV data");
 
-    // 🔹 Fetch from TMDB API
-    console.log("🌍 Fetching Fresh Trending Movies from TMDB...");
-    const response = await fetch(`https://api.themoviedb.org/3/trending/movie/week?api_key=${apiKey}`);
-    const data = await response.json();
-
-    // 🔹 Store in KV for 24 Hours
-    await env.FREESTREAM_CACHE.put(cacheKey, JSON.stringify(data.results), { expirationTtl: 86400 });
-
-    console.log("✅ Trending Movies Cached in KV");
-    return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
+    const data = await response.text();
+    return new Response(data, { headers: { "Content-Type": "text/plain" } });
   } catch (error) {
-    console.log("❌ Error Fetching Trending Movies:", error.message);
+    console.log("❌ Error Fetching IPTV Channels:", error.message);
     return new Response("Internal Server Error: " + error.message, { status: 500 });
   }
 }
 
-// ✅ Search Movies & Shows
-async function fetchSearchResults(query, env) {
-  if (!query) return new Response("Query Missing", { status: 400 });
-
-  const apiKey = "43d89010b257341339737be36dfaac13";
-  const response = await fetch(`https://api.themoviedb.org/3/search/multi?query=${query}&api_key=${apiKey}`);
-  const data = await response.json();
-
-  return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
-}
-
-// ✅ Generate Home Page
+// ✅ Home Page with Movies, TV Shows & IPTV
 async function generateHomePage(env) {
   const trendingResponse = await fetchTrendingMovies(env);
   const trendingData = await trendingResponse.json();
@@ -90,7 +63,7 @@ async function generateHomePage(env) {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>FreeStream - Watch Free Movies & TV Shows</title>
+      <title>FreeStream - Watch Free Movies, TV Shows & IPTV</title>
       <style>
         body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; }
         h1 { font-size: 2.5em; margin-top: 20px; }
@@ -112,6 +85,21 @@ async function generateHomePage(env) {
             </div>
           \`).join("");
         }
+
+        async function loadIPTVChannels() {
+          const response = await fetch("/api/iptv");
+          const data = await response.text();
+          const channels = data.split("#EXTINF").slice(1).map(line => {
+            const details = line.split("\n");
+            return { name: details[0].split(",")[1], url: details[1] };
+          });
+
+          document.getElementById("iptv").innerHTML = channels.map(channel => \`
+            <div class="movie" onclick="window.location='/iptv-player?url=\${encodeURIComponent(channel.url)}'">
+              <h3>\${channel.name}</h3>
+            </div>
+          \`).join("");
+        }
       </script>
     </head>
     <body>
@@ -120,12 +108,41 @@ async function generateHomePage(env) {
       <button onclick="searchMovies()">Search</button>
       <h2>Trending Now</h2>
       <div class="movie-list" id="movies">${movieListHTML}</div>
+      <h2>📺 Live IPTV Channels</h2>
+      <div class="movie-list" id="iptv">
+        <button onclick="loadIPTVChannels()">Load IPTV Channels</button>
+      </div>
     </body>
     </html>
   `;
 }
 
-// ✅ Generate Movie Player Page
+// ✅ IPTV Player Page
+async function generateIPTVPlayerPage(url) {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>FreeStream - IPTV Player</title>
+      <style>
+        body { font-family: Arial, sans-serif; background: #000; color: #fff; text-align: center; }
+        video { width: 100%; height: 90vh; }
+      </style>
+    </head>
+    <body>
+      <h1>📺 Live IPTV</h1>
+      <video controls autoplay>
+        <source src="${url}" type="application/x-mpegURL">
+        Your browser does not support the video tag.
+      </video>
+    </body>
+    </html>
+  `;
+}
+
+// ✅ Movie Player Page
 async function generatePlayerPage(id, env) {
   return `
     <!DOCTYPE html>
