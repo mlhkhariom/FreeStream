@@ -15,15 +15,13 @@ export default {
         return fetchTrendingMovies(env);
       } else if (path.startsWith("/api/search")) {
         const query = url.searchParams.get("q");
-        return fetchSearchResults(query, env);
-      } else if (path.startsWith("/api/watchlist")) {
-        return handleWatchlist(request, env);
+        return fetchSearchResults(query);
       }
 
-      return new Response("404 Not Found", { status: 404 });
+      return new Response(JSON.stringify({ error: "Not Found" }), { status: 404, headers: { "Content-Type": "application/json" } });
     } catch (error) {
-      console.log("Worker Error:", error.message);
-      return new Response("Internal Server Error: " + error.message, { status: 500 });
+      console.error("Worker Error:", error);
+      return new Response(JSON.stringify({ error: "Internal Server Error", message: error.message }), { status: 500, headers: { "Content-Type": "application/json" } });
     }
   }
 };
@@ -31,32 +29,37 @@ export default {
 // ✅ Fetch Trending Movies
 async function fetchTrendingMovies(env) {
   const apiKey = "43d89010b257341339737be36dfaac13";
-
   try {
     const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${apiKey}`);
-    if (!response.ok) throw new Error("Failed to fetch trending movies");
+    if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
 
     const data = await response.json();
     return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
   } catch (error) {
     console.error("❌ Error fetching trending movies:", error);
-    return new Response("Internal Server Error: " + error.message, { status: 500 });
+    return new Response(JSON.stringify({ error: "Failed to fetch trending movies", message: error.message }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
 }
 
 // ✅ Search Movies & Shows
-async function fetchSearchResults(query, env) {
-  if (!query) return new Response("Query Missing", { status: 400 });
+async function fetchSearchResults(query) {
+  if (!query) return new Response(JSON.stringify({ error: "Query Missing" }), { status: 400, headers: { "Content-Type": "application/json" } });
+
   const apiKey = "43d89010b257341339737be36dfaac13";
-  const response = await fetch(`https://api.themoviedb.org/3/search/multi?query=${query}&api_key=${apiKey}`);
-  const data = await response.json();
-  return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
+  try {
+    const response = await fetch(`https://api.themoviedb.org/3/search/multi?query=${encodeURIComponent(query)}&api_key=${apiKey}`);
+    const data = await response.json();
+    return new Response(JSON.stringify(data.results), { headers: { "Content-Type": "application/json" } });
+  } catch (error) {
+    console.error("❌ Error searching movies:", error);
+    return new Response(JSON.stringify({ error: "Failed to fetch search results", message: error.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+  }
 }
 
 // ✅ Generate Home Page
 async function generateHomePage(env) {
   const trendingResponse = await fetchTrendingMovies(env);
-  const trendingData = await trendingResponse.json();
+  const trendingData = await trendingResponse.json().catch(() => []);
 
   let movieListHTML = trendingData.map(movie => `
     <div class="movie" onclick="window.location='/player/${movie.id}'">
@@ -94,7 +97,7 @@ async function generateHomePage(env) {
 }
 
 // ✅ Movie Player Page
-async function generatePlayerPage(id, env) {
+async function generatePlayerPage(id) {
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -113,7 +116,6 @@ async function generatePlayerPage(id, env) {
           const data = await response.json();
           document.getElementById("details").innerHTML = "<strong>" + data.title + "</strong><br>" + data.overview;
         }
-
         window.onload = loadMovieDetails;
       </script>
     </head>
@@ -141,8 +143,7 @@ async function generateIPTVPage() {
       </style>
       <script>
         async function loadIPTV() {
-          const video = document.getElementById("player");
-          video.src = "https://iptv-org.github.io/iptv/index.m3u";
+          document.getElementById("player").src = "https://iptv-org.github.io/iptv/index.m3u";
         }
       </script>
     </head>
