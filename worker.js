@@ -25,7 +25,20 @@ export default {
   }
 };
 
-// ✅ Fetch IPTV Channel List from GitHub
+// ✅ Fetch Trending Movies
+async function fetchTrendingMovies(env) {
+  const apiKey = "43d89010b257341339737be36dfaac13";
+  try {
+    const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${apiKey}`);
+    const data = await response.json();
+    return new Response(JSON.stringify(data.results || []), { headers: { "Content-Type": "application/json" } });
+  } catch (error) {
+    console.error("❌ Error Fetching Trending Movies:", error);
+    return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
+  }
+}
+
+// ✅ Fetch IPTV Channel List
 async function fetchIPTVChannels() {
   try {
     const response = await fetch("https://iptv-org.github.io/iptv/index.m3u");
@@ -61,6 +74,44 @@ function parseM3U(m3uText) {
   });
 
   return channels;
+}
+
+// ✅ Home Page with Trending Movies
+async function generateHomePage(env) {
+  const trendingResponse = await fetchTrendingMovies(env);
+  const trendingData = await trendingResponse.json();
+
+  let movieListHTML = trendingData.map(movie => `
+    <div class="movie" onclick="window.location='/player/${movie.id}'">
+      <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" />
+      <h3>${movie.title || movie.name}</h3>
+    </div>
+  `).join("");
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>FreeStream - Watch Free Movies & TV Shows</title>
+      <style>
+        body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; }
+        h1 { font-size: 2.5em; margin-top: 20px; }
+        input { padding: 10px; width: 80%; margin: 10px 0; }
+        button { padding: 10px 15px; background: red; color: white; border: none; cursor: pointer; }
+        .movie-list { display: flex; flex-wrap: wrap; justify-content: center; }
+        .movie { margin: 10px; cursor: pointer; width: 200px; }
+        .movie img { width: 100%; border-radius: 10px; }
+      </style>
+    </head>
+    <body>
+      <h1>🎬 FreeStream</h1>
+      <h2>Trending Now</h2>
+      <div class="movie-list">${movieListHTML}</div>
+    </body>
+    </html>
+  `;
 }
 
 // ✅ IPTV Player Page with JW Player
@@ -107,6 +158,28 @@ async function generateIPTVPage() {
       <div id="player"></div>
       <h2>Select a Channel</h2>
       <div class="channel-list" id="channelList">Loading channels...</div>
+    </body>
+    </html>
+  `;
+}
+
+// ✅ Movie Player Page
+async function generatePlayerPage(id, env) {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>FreeStream - Player</title>
+      <style>
+        body { font-family: Arial, sans-serif; background: #000; color: #fff; text-align: center; }
+        iframe { width: 100%; height: 500px; border: none; }
+      </style>
+    </head>
+    <body>
+      <h1>🎬 Now Playing</h1>
+      <iframe allowfullscreen src="https://vidsrc.dev/embed/movie/${id}"></iframe>
     </body>
     </html>
   `;
